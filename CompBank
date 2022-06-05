@@ -1,0 +1,61 @@
+#python3
+"""
+从scifinder, reaxys导出的数据整理进入SQLite数据库，用于查询质谱结果
+"""
+import sqlite3, re
+import pandas as pd
+from diy.msanaly import formula
+
+#pd.set_option('display.max_columns', None)
+
+file = "C:/Users/fangdoubleqiang/Desktop/CompBank/25671158_20220605_021405_441.xls"
+file = "C:/Users/fangdoubleqiang/Desktop/CompBank/Substance_05_19_2022_195150.txt"
+
+def createdb():
+    conn = sqlite3.connect("CompBank.db")
+    cur = conn.cursor()
+    cur.execute('''CREATE TABLE CompBank (CASNo TEXT PRIMARY KEY NOT NULL, Name TEXT, OtherNames TEXT, Formula TEXT)''')
+    conn.commit()
+    #cur.execute('''CREATE INDEX No ON CompBank''')
+    cur.close()
+    return None
+
+def updatedb(file):
+    #conn = sqlite.connect("CompBank.db")
+    #cur = conn.cursor()
+    #cur.close()
+    if file.find('Substance') == -1:
+        print("------数据来源Reaxys------")
+        df1 = pd.read_csv(file, sep='\t',usecols=['CAS Registry Number','Chemical Name', 'Molecular Formula'])
+        df2 = df1.rename(columns={'CAS Registry Number':'CASNo','Chemical Name':'Name','Molecular Formula':'Formula'})
+        df2['OtherNames']=''
+    else:
+        print("---数据来源Scifinder----")
+        df1 = pd.read_csv(file, sep=',',usecols=['Registry Number','CA Index Name','Other Names','Formula'])
+        df2 = df1.rename(columns={'Registry Number':'CASNo','CA Index Name':'Name','Other Names':'OtherNames','Formula':'Formula'})
+    df3 = df2.dropna(subset=['CASNo',],axis=0)
+    df3['Formula'] = df3['Formula'].str.replace(' ','')
+    conn = sqlite3.connect("CompBank.db")
+    cur = conn.cursor()
+    for i,line in df3.iterrows():
+        term = (line['CASNo'], line['Name'], line['OtherNames'], line['Formula'])
+        cur.execute("INSERT OR REPLACE INTO CompBank(CASNo, Name, OtherNames, Formula) values (?,?,?,?)", term)
+    conn.commit()
+    cur.close()
+    return None
+
+def querydb(flist):
+    conn = sqlite3.connect("CompBank.db")
+    cur = conn.cursor()
+    fresult = []
+    for f in flist:
+        cur.execute("SELECT * FROM CompBank WHERE Formula=(?)",(f,))
+        fresult = fresult+cur.fetchall()
+
+    df1 = pd.DataFrame(fresult, columns=['CAS No', 'Name', 'Ohter Names','Formula'])
+    cur.close()
+    return df1
+
+#updatedb(file)
+flist = ['C43H36O7','C15H12O7']
+print(querydb(flist))
